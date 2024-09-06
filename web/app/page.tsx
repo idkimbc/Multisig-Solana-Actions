@@ -1,5 +1,19 @@
-import DashboardFeature from '@/components/dashboard/dashboard-feature';
+"use client";
+import { useState } from 'react';
 
 export default function Page() {
-  return <DashboardFeature />;
+  const [address, setAddress] = useState("");
+
+  const handleAddres = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    setAddress(event.target.value)
+  }
+
+  return (
+    <form>
+      <input type='text' value={address}/>
+      <input type='submit' onSubmit={handleAddres}/>
+      <input type='submit' onSubmit={handleAddres}/>
+    </form>
+  )
 }

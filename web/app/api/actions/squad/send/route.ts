@@ -72,7 +72,7 @@ export const POST = async (req: Request) => {
           type: 'inline',
           action: {
             title: 'send money ?!',
-            icon: 'https://ucarecdn.com/f0b82766-5c1d-4fdc-a20e-f980abed0431/-/preview/1030x1021/',
+            icon: `https://ucarecdn.com/12fbf142-a71e-450c-9720-43f30ab132c6/-/preview/1030x1030/`,
             description: 'you can send money from your vault to other wallets',
             label: 'Squads',
             type: 'action',

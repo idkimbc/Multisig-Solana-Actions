@@ -144,7 +144,7 @@ export const POST = async (
                   type: 'inline',
                   action: {
                     title: `Vote on Transaction #${finalTxnIndex}`,
-                    icon: 'https://ucarecdn.com/f0b82766-5c1d-4fdc-a20e-f980abed0431/-/preview/1030x1021/',
+                    icon: `https://ucarecdn.com/f654f416-f791-422b-bd62-8844f455522f/-/preview/1030x1030/`,
                     description: ``,
                     label: 'Squads',
                     type: 'action',

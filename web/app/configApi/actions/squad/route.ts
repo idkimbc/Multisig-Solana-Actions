@@ -16,7 +16,7 @@ import {
 import * as multisig from '@sqds/multisig';
 import { transactionMessageBeet } from '@sqds/multisig/lib/types';
 
-async function validateQueryParams(requestUrl: URL) {
+async function validatedQueryParams(requestUrl: URL) {
   let multisigAddress = '';
   if (requestUrl.searchParams.get('address')) {
     multisigAddress = requestUrl.searchParams.get('address')!;
@@ -27,19 +27,19 @@ async function validateQueryParams(requestUrl: URL) {
 export const GET = async (req: Request) => {
   const requestUrl = new URL(req.url);
   const payload: ActionGetResponse = {
-    title: `squint`,
+    title: 'SQUINT',
     icon: 'https://ucarecdn.com/cb547ecb-e122-4236-ab14-a3b44a42142f/-/preview/1030x1030/',
-    description: `just view your vault for now`,
-    label: 'Squads',
+    description: 'you can change your wallet configuration here',
+    label: 'squads',
     links: {
       actions: [
         {
           label: 'show vault',
-          href: `/api/actions/squad?address={multisigAddress}`,
+          href: `configApi/actions/squad?address={multisigAddress}`,
           parameters: [
             {
               name: 'multisigAddress',
-              label: 'multisig address',
+              label: 'Multisig Address',
               required: true,
             },
           ],
@@ -54,7 +54,7 @@ export const GET = async (req: Request) => {
 export const POST = async (req: Request) => {
   const body: ActionPostRequest = await req.json();
   const requestUrl = new URL(req.url);
-  const { multisigAddress } = await validateQueryParams(requestUrl);
+  const { multisigAddress } = await validatedQueryParams(requestUrl);
 
   let account: PublicKey = new PublicKey(body.account);
   const connection = new Connection(clusterApiUrl('mainnet-beta'));
@@ -71,72 +71,50 @@ export const POST = async (req: Request) => {
     await connection.getLatestBlockhash()
   ).blockhash;
 
-  // multisig address is the "private key" of the vault
   let multisigPda = new PublicKey(multisigAddress);
-  const { Multisig } = multisig.accounts;
-  const multisigAccount = await Multisig.fromAccountAddress(
-    connection,
-    multisigPda
-  );
   let [vault_account] = multisig.getVaultPda({
     multisigPda,
     index: 0,
   });
+  const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
+    connection,
+    multisigPda
+  );
   const multisigInfo = await fetch(
     `https://v4-api.squads.so/multisig/${vault_account.toString()}`
   ).then((res) => res.json());
   const metadata = multisigInfo.metadata;
-
-  const transactionIndex = multisigAccount.transactionIndex;
-
   const baseHref = new URL(
-    `/api/actions/squad/${multisigAddress}`,
+    `/configApi/actions/squad/${multisigAddress}`,
     requestUrl.origin
   ).toString();
-
-  let members = [];
-  members = multisigAccount.members.map((member) => {
-    return member.key.toString();
-  });
-  // appending to the description (ignore)
-  let description = '';
-  for (let i = 0; i < members.length; i++) {
-    description += `${members[i]}\n`;
-  }
 
   const payload: ActionPostResponse = await createPostResponse({
     fields: {
       transaction,
-      message: 'displaying vault',
+      message: '',
       links: {
         next: {
           type: 'inline',
           action: {
             title: `${metadata.name}`,
+            description: 'yay your vault',
             icon: `https://ucarecdn.com/0ed3740a-446f-4399-9493-1d8e9b966cf1/-/preview/1030x1021/`,
-            description: description,
-            label: 'Squads',
+            label: 'squads',
             type: 'action',
             links: {
               actions: [
                 {
-                  label: 'Make transactions',
-                  href: `/api/actions/squad/send?multisigPda=${multisigPda.toString()}`,
+                  label: 'Add member',
+                  href: `/configApi/actions/squad/addMember?multisigPda=${multisigPda.toString()}`,
                 },
                 {
-                  label: 'deposit',
-                  href: `/api/actions/squad/deposit?multisigPda=${multisigPda.toString()}`,
+                  label: 'Remove member',
+                  href: `/configApi/actions/squad/removeMember?multisigPda=${multisigPda}`,
                 },
                 {
-                  label: 'vote',
-                  href: `${baseHref}?action=goToTxnIndex&amount=0&txnIndex={txnIndex}`,
-                  parameters: [
-                    {
-                      name: 'txnIndex',
-                      label: `vote for transaction ${transactionIndex}`,
-                      required: true,
-                    },
-                  ],
+                  label: 'Change threshold',
+                  href: `/configApi/actions/squad/changeThreshold?multisigPda=${multisigPda}`,
                 },
               ],
             },
@@ -149,7 +127,7 @@ export const POST = async (req: Request) => {
   return Response.json(payload, { headers: ACTIONS_CORS_HEADERS });
 };
 
-export const OPTIONS = async (req: Request) => {
+export const OPTION = async (req: Request) => {
   return new Response(null, {
     status: 204,
     headers: ACTIONS_CORS_HEADERS,
