@@ -44,7 +44,7 @@ export const POST = async (
 ) => {
   try {
     const requestUrl = new URL(req.url);
-    const { action, amount, txnIndexForChecking, wallet } =
+    const { action, amount, txnIndexForChecking, wallet, memberAddress, newThreshold } =
       validatedQueryParams(requestUrl);
 
     const body: ActionPostRequest = await req.json();
@@ -127,51 +127,64 @@ export const POST = async (
       );
     }
 
+    if (action == 'add') {
+      transaction.add(
+        multisig.instructions.configTransactionCreate({
+          multisigPda,
+          transactionIndex: BigInt(Number(txnIndex) + 1),
+          creator: payerAccount,
+          actions: [
+            {
+              __kind: 'AddMember',
+              newMember: {
+                key: new PublicKey(memberAddress),
+                permissions: multisig.types.Permissions.all(),
+              },
+            },
+          ],
+        })
+      );
+    }
+    if (action == 'remove') {
+      transaction.add(
+        multisig.instructions.configTransactionCreate({
+          multisigPda,
+          transactionIndex: BigInt(Number(txnIndex) + 1),
+          creator: payerAccount,
+          actions: [
+            {
+              __kind: 'RemoveMember',
+              oldMember: new PublicKey(memberAddress),
+            },
+          ],
+        })
+      );
+    }
+    if (action == 'change') {
+      transaction.add(
+        multisig.instructions.configTransactionCreate({
+          multisigPda,
+          transactionIndex: BigInt(Number(txnIndex) + 1),
+          creator: payerAccount,
+          actions: [
+            {
+              __kind: 'ChangeThreshold',
+              newThreshold: newThreshold,
+            },
+          ],
+        })
+      );
+    }
+
     transaction.feePayer = payerAccount;
     transaction.recentBlockhash = (
       await connection.getLatestBlockhash()
     ).blockhash;
 
-
     let payload: ActionPostResponse = await createPostResponse({
       fields: {
         transaction,
         message: `Transaction Successful`,
-        links:
-          action !== 'deposit'
-            ? {
-                next: {
-                  type: 'inline',
-                  action: {
-                    title: `Vote on Transaction #${finalTxnIndex}`,
-                    icon: `https://ucarecdn.com/f654f416-f791-422b-bd62-8844f455522f/-/preview/1030x1030/`,
-                    description: ``,
-                    label: 'Squads',
-                    type: 'action',
-                    links: {
-                      actions: [
-                        {
-                          label: 'Approve',
-                          href: `/api/actions/squad/vote?multisigPda=${multisigPda.toString()}&txnIndex=${finalTxnIndex}&action=approve`,
-                        },
-                        {
-                          label: 'Execute',
-                          href: `/api/actions/squad/vote?multisigPda=${multisigPda.toString()}&txnIndex=${finalTxnIndex}&action=execute`,
-                        },
-                        {
-                          label: 'Reject',
-                          href: `/api/actions/squad/vote?multisigPda=${multisigPda.toString()}&txnIndex=${finalTxnIndex}&action=reject`,
-                        },
-                        {
-                          label: 'Approve and Execute',
-                          href: `/api/actions/squad/vote?multisigPda=${multisigPda.toBase58()}&txnIndex=${finalTxnIndex}&action=approveandexecute`,
-                        },
-                      ],
-                    },
-                  },
-                },
-              }
-            : undefined,
       },
     });
 
@@ -201,6 +214,15 @@ function validatedQueryParams(requestUrl: URL) {
   let amount = 0.001;
   let txnIndexForChecking = 0;
   let wallet = '';
+  let memberAddress = '';
+  let newThreshold = 0;
+
+  if (requestUrl.searchParams.get('newThreshold')) {
+    newThreshold = parseInt(requestUrl.searchParams.get('newThreshold')!);
+  }
+  if (requestUrl.searchParams.get('memberAddress')) {
+    memberAddress = requestUrl.searchParams.get('memberAddress')!;
+  }
   try {
     if (requestUrl.searchParams.get('action')) {
       action = requestUrl.searchParams.get('action')!;
@@ -223,5 +245,5 @@ function validatedQueryParams(requestUrl: URL) {
       requestUrl.searchParams.get('wallet') ||
       '46Cx8SHg8jojWgG6QdytHZK8Fr2eheK6YqZDaSy49q4V';
   }
-  return { action, amount, txnIndexForChecking, wallet };
+  return { action, amount, txnIndexForChecking, wallet, memberAddress, newThreshold };
 }

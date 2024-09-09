@@ -1,139 +1,133 @@
 import {
+  createActionHeaders,
+  NextActionPostRequest,
+  ActionError,
+  CompletedAction,
+  ACTIONS_CORS_HEADERS,
+  ActionGetRequest,
   ActionGetResponse,
   ActionPostRequest,
   ActionPostResponse,
-  ACTIONS_CORS_HEADERS,
   createPostResponse,
 } from '@solana/actions';
 import {
+  SystemProgram,
   clusterApiUrl,
   Connection,
   PublicKey,
-  SystemProgram,
   Transaction,
-  TransactionStatus,
+  TransactionInstruction,
+  ComputeBudgetProgram,
 } from '@solana/web3.js';
-import * as multisig from '@sqds/multisig';
-import { transactionMessageBeet } from '@sqds/multisig/lib/types';
-
-async function validateQueryParams(requestUrl: URL) {
-  let multisigAddress = '';
-  if (requestUrl.searchParams.get('address')) {
-    multisigAddress = requestUrl.searchParams.get('address')!;
-  }
-  return { multisigAddress };
-}
+import * as multisig from '../../../../../node_modules/@sqds/multisig/lib/index';
 
 export const GET = async (req: Request) => {
-  const requestUrl = new URL(req.url);
-  const payload: ActionGetResponse = {
-    title: `squint`,
-    icon: 'https://ucarecdn.com/cb547ecb-e122-4236-ab14-a3b44a42142f/-/preview/1030x1030/',
-    description: `just view your vault for now`,
-    label: 'Squads',
-    links: {
-      actions: [
-        {
-          label: 'show vault',
-          href: `/api/actions/squad?address={multisigAddress}`,
-          parameters: [
-            {
-              name: 'multisigAddress',
-              label: 'multisig address',
-              required: true,
-            },
-          ],
-        },
-      ],
-    },
-  };
+  try {
+    const requestUrl = new URL(req.url);
+    const { multisigAddress } = await validatedQueryParams(requestUrl);
+    const connection = new Connection(clusterApiUrl("mainnet-beta"));
 
-  return Response.json(payload, { headers: ACTIONS_CORS_HEADERS });
+    let multisigPda = new PublicKey(multisigAddress);
+    let [vault_account] = multisig.getVaultPda({
+      multisigPda,
+      index: 0,
+    });
+    const multisigAccount = await multisig.accounts.Multisig.fromAccountAddress(
+      connection,
+      multisigPda
+    );
+    const multisigInfo = await fetch(
+      `https://v4-api.squads.so/multisig/${vault_account.toString()}`
+    ).then((res) => res.json());
+    const metadata = multisigInfo.metadata;
+
+    const payload: ActionGetResponse = {
+      title: `${metadata.name}`,
+      icon: `https://ucarecdn.com/7ae08282-2d17-4025-8206-8991c0a5865d/-/preview/1030x1030/`,
+      description: `View your vault, perform squads actions and vote on transactions!`,
+      label: 'Squads',
+      links: {
+        actions: [
+          {
+            label: 'Initiate a transaction',
+            href: `/api/actions/squad?address=${multisigAddress}`,
+          },
+        ],
+      },
+    };
+
+    return Response.json(payload, {
+      headers: ACTIONS_CORS_HEADERS,
+    });
+  } catch (err) {
+    console.log(err);
+    let message = 'invalid Multisig PDA';
+    if (typeof err == 'string') message = err;
+    return new Response(message, {
+      status: 400,
+      headers: ACTIONS_CORS_HEADERS,
+    });
+  }
 };
 
 export const POST = async (req: Request) => {
-  const body: ActionPostRequest = await req.json();
   const requestUrl = new URL(req.url);
-  const { multisigAddress } = await validateQueryParams(requestUrl);
+  const { multisigAddress } = await validatedQueryParams(requestUrl);
+  const multisigPda = new PublicKey(multisigAddress);
 
-  let account: PublicKey = new PublicKey(body.account);
   const connection = new Connection(clusterApiUrl('mainnet-beta'));
-  const transaction = new Transaction();
-  transaction.add(
-    SystemProgram.transfer({
-      fromPubkey: account,
-      toPubkey: account,
-      lamports: 0,
-    })
-  );
-  transaction.feePayer = account;
-  transaction.recentBlockhash = (
-    await connection.getLatestBlockhash()
-  ).blockhash;
-
-  // multisig address is the "private key" of the vault
-  let multisigPda = new PublicKey(multisigAddress);
-  const { Multisig } = multisig.accounts;
-  const multisigAccount = await Multisig.fromAccountAddress(
-    connection,
-    multisigPda
-  );
-  let [vault_account] = multisig.getVaultPda({
-    multisigPda,
-    index: 0,
-  });
-  const multisigInfo = await fetch(
-    `https://v4-api.squads.so/multisig/${vault_account.toString()}`
-  ).then((res) => res.json());
-  const metadata = multisigInfo.metadata;
-
-  const transactionIndex = multisigAccount.transactionIndex;
-
   const baseHref = new URL(
     `/api/actions/squad/${multisigAddress}`,
     requestUrl.origin
   ).toString();
 
-  let members = [];
-  members = multisigAccount.members.map((member) => {
-    return member.key.toString();
+  let [vault_account] = multisig.getVaultPda({
+    multisigPda,
+    index: 0,
   });
-  // appending to the description (ignore)
-  let description = '';
-  for (let i = 0; i < members.length; i++) {
-    description += `${members[i]}\n`;
-  }
+
+  const body: ActionPostRequest = await req.json();
+  let payerAccount: PublicKey = new PublicKey(body.account);
+  const transaction = new Transaction();
+  transaction.add(
+    SystemProgram.transfer({
+      fromPubkey: payerAccount,
+      toPubkey: payerAccount,
+      lamports: 0,
+    })
+  );
+  transaction.feePayer = payerAccount;
+  transaction.recentBlockhash = (
+    await connection.getLatestBlockhash()
+  ).blockhash;
 
   const payload: ActionPostResponse = await createPostResponse({
     fields: {
-      transaction,
-      message: 'displaying vault',
+      transaction: transaction,
+      message: '',
       links: {
         next: {
           type: 'inline',
           action: {
-            title: `${metadata.name}`,
-            icon: `https://ucarecdn.com/0ed3740a-446f-4399-9493-1d8e9b966cf1/-/preview/1030x1021/`,
-            description: description,
+            title: 'send money ?!',
+            icon: `https://ucarecdn.com/12fbf142-a71e-450c-9720-43f30ab132c6/-/preview/1030x1030/`,
+            description: 'you can send money from your vault to other wallets',
             label: 'Squads',
             type: 'action',
             links: {
               actions: [
                 {
-                  label: 'Make transactions',
-                  href: `/api/actions/squad/send?multisigPda=${multisigPda.toString()}`,
-                },
-                {
-                  label: 'deposit',
-                  href: `/api/actions/squad/deposit?multisigPda=${multisigPda.toString()}`,
-                },
-                {
-                  label: 'vote',
-                  href: `${baseHref}?action=goToTxnIndex&amount=0&txnIndex={txnIndex}`,
+                  label: 'send',
+                  href: `${baseHref}?action=send&amount={sendAmount}&wallet={wallet}`,
                   parameters: [
                     {
-                      name: 'txnIndex',
-                      label: `vote for transaction ${transactionIndex}`,
+                      name: 'sendAmount',
+                      label: 'amount',
+                      required: true,
+                    },
+                    {
+                      name: 'wallet',
+                      label: 'wallet address of recipient',
                       required: true,
                     },
                   ],
@@ -149,9 +143,17 @@ export const POST = async (req: Request) => {
   return Response.json(payload, { headers: ACTIONS_CORS_HEADERS });
 };
 
-export const OPTIONS = async (req: Request) => {
-  return new Response(null, {
-    status: 204,
-    headers: ACTIONS_CORS_HEADERS,
-  });
-};
+export const OPTIONS = GET;
+
+async function validatedQueryParams(requestUrl: URL) {
+  let multisigAddress = '';
+  try {
+    if (requestUrl.searchParams.get('address')) {
+      multisigAddress = requestUrl.searchParams.get('address')!;
+    }
+  } catch (err) {
+    throw 'Invalid input query parameter';
+  }
+
+  return { multisigAddress };
+}
