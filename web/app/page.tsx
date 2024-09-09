@@ -3,7 +3,9 @@ import React, { useState, FormEvent } from 'react';
 
 export default function Page() {
   const [address, setAddress] = useState("");
-  const baseUrl = "http://localhost:3000"
+  const baseUrl = process.env.NODE_ENV === 'production'
+    ? 'https://extended-blinks.vercel.app/'
+    : 'http://localhost:3000';
 
   const handleAddress = (event: React.ChangeEvent<HTMLInputElement>) => {
     setAddress(event.target.value)
